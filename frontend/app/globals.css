@@ -1,0 +1,78 @@
+@import 'leaflet/dist/leaflet.css';
+@import 'leaflet-draw/dist/leaflet.draw.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: #06111f;
+  color: #f8fafc;
+}
+
+.glass {
+  border: 1px solid rgba(255,255,255,.18);
+  background: linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.06));
+  box-shadow: 0 20px 70px rgba(2, 8, 23, .32);
+  backdrop-filter: blur(22px);
+}
+
+.light .glass {
+  border-color: rgba(15, 23, 42, .12);
+  background: linear-gradient(135deg, rgba(255,255,255,.86), rgba(255,255,255,.62));
+  color: #0f172a;
+}
+
+.map-shell .leaflet-container {
+  min-height: 660px;
+  height: calc(100vh - 130px);
+  width: 100%;
+  border-radius: 2rem;
+  background: #0f172a;
+  font-family: inherit;
+}
+
+@media (max-width: 768px) {
+  .map-shell .leaflet-container {
+    min-height: 560px;
+    height: 72vh;
+    border-radius: 1.25rem;
+  }
+}
+
+.leaflet-control-zoom a,
+.leaflet-bar a {
+  background: rgba(15,23,42,.85) !important;
+  color: white !important;
+  border-color: rgba(255,255,255,.14) !important;
+}
+
+.light .leaflet-control-zoom a,
+.light .leaflet-bar a {
+  background: rgba(255,255,255,.92) !important;
+  color: #0f172a !important;
+}
+
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: rgba(15, 23, 42, .94);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.12);
+  backdrop-filter: blur(14px);
+}
+
+.light .leaflet-popup-content-wrapper, .light .leaflet-popup-tip {
+  background: rgba(255,255,255,.96);
+  color: #0f172a;
+}
+
+.print-map-export .leaflet-control-container,
+.print-map-export .no-export {
+  display: none !important;
+}
