@@ -84,6 +84,9 @@ class Signals(QObject):
     delta = Signal(str)
     done = Signal(object)
     error = Signal(str)
+    voice_state = Signal(bool)
+    voice_error = Signal(str)
+    tts_finished = Signal()
 
 
 class CommandWorker(QRunnable):
@@ -247,6 +250,9 @@ class JarvisWindow(QMainWindow):
         self.signals.delta.connect(self._append_stream)
         self.signals.done.connect(self._finish_reply)
         self.signals.error.connect(lambda error: self._finish_text(f"I hit an error: {error}"))
+        self.signals.voice_state.connect(self._voice_state_gui)
+        self.signals.voice_error.connect(self._voice_error_gui)
+        self.signals.tts_finished.connect(self._speech_done)
         self.settings_btn.clicked.connect(self.open_settings)
 
     def _set_state(self, state: AssistantState, activity: str) -> None:
@@ -326,6 +332,9 @@ class JarvisWindow(QMainWindow):
         self.voice.arm_session(18.0)
         self.tts.speak_async("Haan bhai, bolo. Main sun raha hoon.")
     def _voice_state(self, active: bool) -> None:
+        self.signals.voice_state.emit(active)
+
+    def _voice_state_gui(self, active: bool) -> None:
         self._set_state(AssistantState.LISTENING if active else AssistantState.IDLE, "Haan, bolo. Main sun raha hoon…" if active else "Voice listening is off")
 
     def _voice_command(self, text: str) -> None:
@@ -343,7 +352,11 @@ class JarvisWindow(QMainWindow):
         QTimer.singleShot(0, ui)
 
     def _voice_error(self, error: str) -> None:
-        QTimer.singleShot(0, lambda: self._finish_text(f"Voice input is unavailable: {error}"))
+        self.signals.voice_error.emit(error)
+
+    def _voice_error_gui(self, error: str) -> None:
+        self.talk.setChecked(False)
+        self._finish_text(f"Voice input is unavailable: {error}")
 
     def toggle_typing(self, checked: bool | None = None) -> None:
         active=self.type_btn.isChecked() if checked is None else checked; self.typing_mode=active; self.type_btn.setChecked(active)
