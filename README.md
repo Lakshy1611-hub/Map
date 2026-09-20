@@ -1,41 +1,51 @@
-# JARVIS — Phase 1 Windows Desktop Assistant
+# JARVIS — Personal Windows AI Assistant
 
-JARVIS is a **real Python Windows desktop application**, not a browser mock-up or a script-only prompt demo. `main.py` creates a native Tk window, manages its event loop, supports minimize-to-tray when the optional tray dependency is installed, and connects conversation decisions to concrete OS automation tools.
+JARVIS is a native Windows desktop assistant designed for natural Hindi, English, and Hinglish interaction. The product combines a fast local command router, an online Gemini/OpenAI-compatible AI provider, optional local/offline AI, Windows automation, screen vision, multilingual speech, a futuristic Qt UI, and a system tray.
 
-## Current architecture
+## What it can do
+- Talk naturally in Hindi, English, and Hinglish.
+- Type commands or use the microphone.
+- Wake on **Jarvis** when background listening is enabled.
+- Continue a short hands-free conversation without repeating the wake word after activation.
+- Open and close applications such as Chrome, Edge, Notepad, Calculator, File Explorer, PowerShell, Windows Terminal, VS Code, and other resolvable Windows apps.
+- Use keyboard and mouse controls, including Unicode-safe typing for Hindi/Hinglish.
+- Open URLs, search the web, refresh, go back, switch windows, and scroll.
+- Capture the screen and ask Gemini what is visible.
+- Ask Gemini to locate and click a described screen element; sensitive targets require confirmation.
+- Run PowerShell/terminal commands, with destructive patterns requiring confirmation.
+- Execute bounded multi-step desktop tasks when the model can plan them.
+- Speak responses with neural Indian-English/Hindi voices through Edge TTS, with local pyttsx3 fallback.
+- Run a local/offline response provider through Ollama when it is installed and a model is available.
+- Stay in the Windows system tray and restore from the tray.
+- Use a premium animated PySide6 interface with status/orb/waveform states.
+- Build to a single JARVIS.exe using the included PyInstaller configuration.
 
+## Architecture
 | Area | Responsibility |
 | --- | --- |
-| `main.py` | Desktop application entry point. |
-| `jarvis/config.py` | `.env` configuration for model, voice, privacy and debug behavior. |
-| `jarvis/core/` | Conversation context, assistant state machine, plan execution and response models. |
-| `jarvis/llm/` | Replaceable model provider. The model can select only names exposed by the tool registry. |
-| `jarvis/tools/` | Concrete application, keyboard/mouse, screen, browser, file, terminal and system tools. |
-| `jarvis/voice/` | Provider boundary for one-request speech recognition and TTS. |
-| `jarvis/security/` | Confirmation rule for deletions and dangerous commands. |
-| `jarvis/storage/` | SQLite preference store, intentionally separate from conversation history. |
-| `jarvis/ui/` | Responsive native window, animated orb/waveform, microphone state and optional tray integration. |
-| `jarvis/logging/` | Privacy-conscious structured event logging boundary. |
-| `tests/` | Fast non-destructive core behavior tests. |
-
-## Phase 1 features that work
-
-- Native dark desktop UI with responsive transcript, animated AI core and waveform, and visible **READY / LISTENING / THINKING / EXECUTING / SPEAKING / PAUSED** status.
-- Text conversation, contextual follow-up (`Chrome open kar` then `ab YouTube pe ja`), and common English/Hinglish local handling when no model key is configured.
-- Optional OpenAI model integration for dynamic natural-language selection among registered explicit tools; no model output can execute directly.
-- Windows application launching for Chrome, Notepad and VS Code; PyAutoGUI keyboard, mouse and screenshot controls; browser URL/search; file, terminal and system tools.
-- One-request microphone input and non-blocking multilingual TTS output behind replaceable provider modules. The default `edge_tts` provider uses neural Hindi and Indian-English voices, separates mixed Hindi/English speech where possible, and falls back to local `pyttsx3` if it is unavailable. The microphone is only opened after **TALK** is pressed.
-- System tray UI with Open, Pause and Exit actions when `pystray` and Pillow are installed. Closing the window minimizes it to the tray instead of exiting.
-- Confirmation for deletion and known destructive command patterns.
+| `main.py` | Qt application entrypoint. |
+| `jarvis/config.py` | Environment-backed settings and frozen-EXE paths. |
+| `jarvis/core/` | Conversation state, fallback routing, bounded agent execution. |
+| `jarvis/llm/` | Online Gemini/OpenAI-compatible chat, streaming, and tool planning. |
+| `jarvis/offline.py` | Optional local Ollama response provider and deterministic offline fallback. |
+| `jarvis/tools/` | Windows apps, keyboard/mouse, browser, files, screen, terminal, system and window controls. |
+| `jarvis/voice/` | Speech recognition and multilingual TTS. |
+| `jarvis/ui/` | PySide6 UI, animated core, chat, settings and system tray. |
+| `jarvis/security/` | Confirmation policy for destructive/sensitive actions. |
+| `jarvis/storage/` | SQLite preference storage foundation. |
+| `tests/` | Deterministic unit tests that do not consume remote model quota. |
+| `jarvis.spec` | One-file PyInstaller build definition. |
+| `build.ps1` | Reproducible Windows build script. |
+| `.github/workflows/windows-build.yml` | Windows CI test plus EXE artifact build. |
 
 ## Windows setup
-
-Use Python 3.11 or 3.12 (64-bit recommended) in **PowerShell**:
+Use Python 3.11 or 3.12 (64-bit recommended) and PowerShell.
 
 ```powershell
-cd path\to\Map
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+cd C:\Projects\JARVIS
+git clone -b codex/jarvis-final-product --single-branch https://github.com/Lakshy1611-hub/Map.git Map-codex-build-jarvis-ai-assistant-for-windows
+cd Map-codex-build-jarvis-ai-assistant-for-windows
+..\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 Copy-Item .env.example .env
@@ -43,32 +53,90 @@ notepad .env
 python main.py
 ```
 
-Set `JARVIS_OPENAI_API_KEY`, `JARVIS_MODEL`, and `OPENAI_BASE_URL` in `.env` for AI-powered dynamic planning. For Gemini’s OpenAI-compatible API use `OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/`. JARVIS intentionally reads `JARVIS_OPENAI_API_KEY` rather than `OPENAI_API_KEY`. Without it, the intentional local fallback handles the Phase 1 examples but is not a replacement for an LLM.
+Put your Gemini key in `.env` as `JARVIS_OPENAI_API_KEY`. For Gemini's OpenAI-compatible endpoint use:
 
-### Multilingual speech
+```text
+OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+```
 
-`JARVIS_TTS_PROVIDER=edge_tts` is the recommended Windows configuration. It uses the standard configurable `JARVIS_TTS_ENGLISH_VOICE` and `JARVIS_TTS_HINDI_VOICE` names rather than local machine voice IDs. Set `JARVIS_TTS_LANGUAGE_AUTO=true` to detect Devanagari, English, and common Romanized Hindi phrases; well-known English product names such as Chrome, YouTube, Windows, Google, browser, file, and search remain in English voice segments. `pyttsx3` remains the local fallback. Press **STOP** or **Esc** to interrupt playback.
+The API key is never committed to Git because `.env` is ignored.
 
-### Windows prerequisites
+## Fast response behavior
+Normal conversation uses a streaming model request, so text can appear as soon as the provider returns the first chunks instead of waiting for the entire answer. Common PC actions are handled by the local command router first, reducing unnecessary model calls.
 
-- **Chrome / VS Code:** install normally and ensure they are available through Windows App Paths or `PATH`.
-- **Microphone:** permit desktop microphone access in Windows Privacy & security settings. `PyAudio` is installed on Windows by the requirements file; if a compiler-wheel mismatch occurs, install a PyAudio wheel matching your Python architecture first, then rerun the requirements command.
-- **PyAutoGUI safety:** move the pointer to the top-left screen corner to trigger its failsafe during automation.
+Streaming improves time-to-first-visible-text; it does not make the network itself instantaneous. Online Gemini responses remain subject to network latency and quota.
 
-## Main workflow test
+## Voice
+Default configuration:
 
-1. Run `python main.py`; a resizable 920×760 JARVIS window and tray icon should appear.
-2. Send `bhai kya haal hai?`; verify a conversational reply in the transcript.
-3. Send `Chrome open kar`; confirm Chrome launches and JARVIS reports success or a useful error.
-4. Send `open Notepad`, focus the Notepad window, then send `type Hello bhai`; verify text is typed into the focused window.
-5. Send `take a screenshot`; verify a timestamped PNG appears under `screenshots/`.
-6. Click **TALK**, say `Jarvis, Chrome kholo`, and confirm the microphone status returns to off after the request.
-7. Close the window; use the JARVIS tray icon to restore it, pause it, or exit.
+```text
+JARVIS_STT_PROVIDER=speech_recognition
+JARVIS_STT_LANGUAGE=en-IN
+JARVIS_TTS_PROVIDER=edge_tts
+JARVIS_TTS_LANGUAGE_AUTO=true
+JARVIS_TTS_ENGLISH_VOICE=en-IN-NeerjaNeural
+JARVIS_TTS_HINDI_VOICE=hi-IN-SwaraNeural
+JARVIS_WAKE_PHRASE=jarvis
+JARVIS_VOICE_ENABLED=true
+JARVIS_ALWAYS_LISTENING=true
+```
 
-## Remaining Phase 1 environment limitations
+The listening mode can be toggled from **TALK** or the tray. After a recognized wake-word command, JARVIS keeps a short 18-second wake-free conversation session before requiring the wake word again.
 
-This repository can run and be validated on a Windows desktop. The current CI container is Linux, lacks a graphical `$DISPLAY`, Windows APIs, microphone hardware, and has a package-index proxy restriction; it therefore cannot launch or validate the native Windows window/automation end-to-end here. These are environment limitations, not deliberate mock implementations.
+Speech recognition currently uses the Windows microphone plus the configured recognition service. Offline voice recognition is not included yet; offline text responses can use Ollama/local fallback.
 
-## Explicitly deferred to later phases
+## Screen understanding
+`inspect_screen` captures the desktop and sends the image to the configured Gemini vision model. `visual_click` asks the vision model for coordinates and only clicks when confidence passes a safety threshold. Sensitive click targets require confirmation.
 
-Continuous wake word/VAD, interruption cancellation of already-started work, dictation mode, Playwright sessions, vision-model screen analysis, multi-step browser/desktop planning, Windows startup registration, and persistent user-preference UI remain future work. `inspect_screen` safely captures a screenshot today but does not send images to an LLM yet.
+## Offline mode
+When the internet is unavailable, JARVIS first uses its deterministic local router for PC actions and then tries an installed local Ollama model for conversational answers.
+
+```text
+JARVIS_OFFLINE_PROVIDER=ollama
+JARVIS_OFFLINE_MODEL=gemma4:4b
+JARVIS_OLLAMA_URL=http://127.0.0.1:11434
+```
+
+A local model can answer from its installed knowledge, but it cannot provide fresh internet data while offline.
+
+## Building the EXE
+On Windows:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+.\build.ps1
+```
+
+The result is:
+
+```text
+dist\JARVIS.exe
+```
+
+The EXE is windowed with no console. `.env` remains external local configuration; never embed API keys in the executable.
+
+GitHub Actions also builds the executable on a Windows runner and uploads `dist/JARVIS.exe` as an artifact after tests pass.
+
+## Safety model
+JARVIS can control the PC, so destructive operations are not silently approved. File deletion, sensitive visual clicks, and recognized destructive terminal/system patterns require confirmation. The assistant should report failures rather than claiming an action succeeded.
+
+## Updating the local clone
+The final-product branch is `codex/jarvis-final-product`.
+
+```powershell
+git fetch origin
+git switch codex/jarvis-final-product
+git pull --ff-only
+python -m pip install -r requirements.txt
+python main.py
+```
+
+Your `.env` stays local because Git ignores it.
+
+## Current boundaries
+- Online Gemini responses remain subject to provider latency and quota.
+- Offline voice recognition is not included yet.
+- JARVIS does not silently rewrite or self-modify its own source code.
+- Automatic software updates should be explicit, signed/versioned updates rather than unrestricted self-modification.
+- Some third-party Windows applications may require custom aliases or UI-specific workflows.
