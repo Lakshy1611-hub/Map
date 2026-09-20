@@ -43,7 +43,7 @@ notepad .env
 python main.py
 ```
 
-Set `JARVIS_OPENAI_API_KEY` in `.env` for AI-powered dynamic planning. Without it, the intentional local fallback handles the Phase 1 examples but is not a replacement for an LLM.
+Set `JARVIS_OPENAI_API_KEY`, `JARVIS_MODEL`, and `OPENAI_BASE_URL` in `.env` for AI-powered dynamic planning. For Gemini’s OpenAI-compatible API use `OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/`. JARVIS intentionally reads `JARVIS_OPENAI_API_KEY` rather than `OPENAI_API_KEY`. Without it, the intentional local fallback handles the Phase 1 examples but is not a replacement for an LLM.
 
 ### Windows prerequisites
 
