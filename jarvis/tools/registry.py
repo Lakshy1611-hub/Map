@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, Callable
+from typing import Any, Callable, get_type_hints, get_origin
 
 from jarvis.core.models import ToolResult
 
@@ -29,21 +29,27 @@ class ToolRegistry:
         specs: list[dict[str, Any]] = []
         for name, fn in sorted(self._tools.items()):
             signature = inspect.signature(fn)
+            try:
+                hints = get_type_hints(fn)
+            except Exception:
+                hints = {}
             properties: dict[str, Any] = {}
             required: list[str] = []
             for parameter in signature.parameters.values():
                 if parameter.kind in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD):
                     continue
-                annotation = parameter.annotation
-                kind = "string"
+                annotation = hints.get(parameter.name, parameter.annotation)
+                origin = get_origin(annotation)
                 if annotation is int:
                     kind = "integer"
+                elif annotation is float:
+                    kind = "number"
                 elif annotation is bool:
                     kind = "boolean"
-                elif annotation in (float,):
-                    kind = "number"
-                elif getattr(annotation, "__origin__", None) is list:
+                elif origin is list or annotation is list:
                     kind = "array"
+                else:
+                    kind = "string"
                 properties[parameter.name] = {"type": kind}
                 if parameter.default is inspect.Parameter.empty:
                     required.append(parameter.name)
