@@ -310,7 +310,7 @@ class JarvisWindow(QMainWindow):
 
     def start_voice(self) -> None:
         if self.voice.enabled: return
-        self.voice.start_background(self._voice_command,self._voice_state,self._voice_error)
+        self.voice.start_background(self._voice_command, self._voice_state, self._voice_error, self._wake_detected)
         self.talk.setChecked(True)
         self._set_state(AssistantState.LISTENING,"Haan, bolo. Main sun raha hoon…")
 
@@ -321,6 +321,10 @@ class JarvisWindow(QMainWindow):
         if self.talk.isChecked(): self.start_voice()
         else: self.stop_voice()
 
+    def _wake_detected(self) -> None:
+        self.signals.voice_state.emit(True)
+        self.voice.arm_session(18.0)
+        self.tts.speak_async("Haan bhai, bolo. Main sun raha hoon.")
     def _voice_state(self, active: bool) -> None:
         self._set_state(AssistantState.LISTENING if active else AssistantState.IDLE, "Haan, bolo. Main sun raha hoon…" if active else "Voice listening is off")
 
