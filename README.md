@@ -3,6 +3,8 @@
 JARVIS is a native Windows desktop assistant designed for natural Hindi, English, and Hinglish interaction. The product combines a fast local command router, an online Gemini/OpenAI-compatible AI provider, optional local/offline AI, Windows automation, screen vision, multilingual speech, a futuristic Qt UI, and a system tray.
 
 ## What it can do
+
+This branch is the candidate final desktop build; Windows CI is the release gate.
 - Talk naturally in Hindi, English, and Hinglish.
 - Type commands or use the microphone.
 - Wake on **Jarvis** when background listening is enabled.
