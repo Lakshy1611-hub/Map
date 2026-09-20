@@ -168,12 +168,14 @@ class JarvisWindow(QMainWindow):
         super().__init__()
         self.assistant = assistant
         self.settings = assistant.settings
-        self.pool = QThreadPool.globalInstance()\n        self.pool.setMaxThreadCount(4)
+        self.pool = QThreadPool.globalInstance()
+        self.pool.setMaxThreadCount(4)
         self.signals = Signals()
         self.voice = SpeechToText(self.settings)
         self.tts = TextToSpeech(self.settings)
         self.typing_mode = False
-        self.quitting = False\n        self._stream_started = False
+        self.quitting = False
+        self._stream_started = False
         self.tray = QSystemTrayIcon(self._make_icon(), self)
         self._configure_window()
         self._build_ui()
@@ -246,7 +248,10 @@ class JarvisWindow(QMainWindow):
         outer.addWidget(composer)
 
     def _connect_signals(self) -> None:
-        self.signals.started.connect(lambda text: self._set_state(AssistantState.THINKING, f"Understanding: {text}"))\n        self.signals.voice_state.connect(self._voice_state_gui)\n        self.signals.voice_error.connect(self._voice_error_gui)\n        self.signals.tts_finished.connect(self._speech_done)
+        self.signals.started.connect(lambda text: self._set_state(AssistantState.THINKING, f"Understanding: {text}"))
+        self.signals.voice_state.connect(self._voice_state_gui)
+        self.signals.voice_error.connect(self._voice_error_gui)
+        self.signals.tts_finished.connect(self._speech_done)
         self.signals.delta.connect(self._append_stream)
         self.signals.done.connect(self._finish_reply)
         self.signals.error.connect(lambda error: self._finish_text(f"I hit an error: {error}"))
