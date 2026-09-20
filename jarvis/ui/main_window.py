@@ -165,12 +165,12 @@ class JarvisWindow(QMainWindow):
         super().__init__()
         self.assistant = assistant
         self.settings = assistant.settings
-        self.pool = QThreadPool.globalInstance()
+        self.pool = QThreadPool.globalInstance()\n        self.pool.setMaxThreadCount(4)
         self.signals = Signals()
         self.voice = SpeechToText(self.settings)
         self.tts = TextToSpeech(self.settings)
         self.typing_mode = False
-        self.quitting = False
+        self.quitting = False\n        self._stream_started = False
         self.tray = QSystemTrayIcon(self._make_icon(), self)
         self._configure_window()
         self._build_ui()
@@ -370,7 +370,7 @@ class JarvisWindow(QMainWindow):
         toggle=QAction("Toggle listening",self); toggle.triggered.connect(lambda: self.stop_voice() if self.voice.enabled else self.start_voice())
         exit_action=QAction("Exit",self); exit_action.triggered.connect(self.quit_app)
         menu.addAction(open_action); menu.addAction(toggle); menu.addSeparator(); menu.addAction(exit_action); self.tray.setContextMenu(menu)
-        self.tray.activated.connect(lambda reason: self.show_window() if reason == QSystemTrayIcon.Trigger else None); self.tray.show()
+        self.tray.activated.connect(lambda reason: self.show_window() if reason == QSystemTrayIcon.ActivationReason.Trigger else None); self.tray.show()
 
     def show_window(self) -> None:
         self.show(); self.raise_(); self.activateWindow()
