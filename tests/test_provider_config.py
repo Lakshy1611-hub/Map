@@ -44,4 +44,4 @@ def test_provider_initializes_openai_client_with_configured_gemini_values(monkey
     provider = LLMProvider(settings)
     provider.create_client()
 
-    assert calls == [{"api_key": "jarvis-key", "base_url": settings.base_url}]
+    assert calls == [{"api_key": "jarvis-key", "base_url": settings.base_url, "timeout": settings.response_timeout}]
