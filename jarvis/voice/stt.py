@@ -13,7 +13,7 @@ class SpeechToText:
         self.settings = settings or Settings()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._enabled = False
+        self._enabled = False\n        self._session_until = 0.0
 
     def listen_once(self) -> str:
         import speech_recognition as sr
@@ -72,7 +72,7 @@ class SpeechToText:
                         else:
                             command = heard
                         if command:
-                            on_command(command)
+                            on_command(command)\n                            self._session_until = time.monotonic() + 18.0
             except Exception as exc:
                 if on_error:
                     on_error(str(exc))
