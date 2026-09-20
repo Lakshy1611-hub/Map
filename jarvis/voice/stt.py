@@ -34,7 +34,7 @@ class SpeechToText:
         pattern = r"^\s*(?:hey\s+)?" + re.escape(wake_phrase) + r"[\s,;:.-]*"
         return re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
 
-    def start_background(self, on_command: Callable[[str], None], on_listening: Callable[[bool], None] | None = None, on_error: Callable[[str], None] | None = None) -> None:
+    def start_background(self, on_command: Callable[[str], None], on_listening: Callable[[bool], None] | None = None, on_error: Callable[[str], None] | None = None, on_wake: Callable[[], None] | None = None) -> None:
         if self._thread and self._thread.is_alive():
             self._enabled = True
             return
