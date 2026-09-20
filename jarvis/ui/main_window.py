@@ -1,266 +1,379 @@
-"""Responsive Tk desktop shell for JARVIS. It owns presentation, not assistant logic."""
+"""Premium PySide6 desktop UI for JARVIS."""
 from __future__ import annotations
 
-import importlib.util
-import math
+import os
 import threading
-import tkinter as tk
-from tkinter import scrolledtext
-from typing import TYPE_CHECKING
+from pathlib import Path
 
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal, Qt, QRectF, QPointF
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QRadialGradient
+from PySide6.QtWidgets import (
+    QApplication, QCheckBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSizePolicy, QSystemTrayIcon,
+    QTextEdit, QVBoxLayout, QWidget
+)
+
+from jarvis.config import Settings
 from jarvis.core.assistant import Assistant
 from jarvis.core.models import AssistantState
-from jarvis.ui.tray import TrayController
+from jarvis.voice.stt import SpeechToText
+from jarvis.voice.tts import TextToSpeech
 
-if TYPE_CHECKING:
-    from jarvis.core.models import ChatReply
-
-BACKGROUND = "#06101d"
-SURFACE = "#0b1b2e"
-SURFACE_ALT = "#10263d"
-TEXT = "#e9f7ff"
-MUTED = "#91a9ba"
-ACCENT = "#31e0da"
-STATE_COLORS = {
-    AssistantState.IDLE: "#47dfb5",
-    AssistantState.LISTENING: "#42dfff",
-    AssistantState.THINKING: "#a987ff",
-    AssistantState.EXECUTING: "#ffd166",
-    AssistantState.SPEAKING: "#ff8ecc",
-    AssistantState.PAUSED: "#91a9ba",
-}
+BG = "#050913"
+PANEL = "#0a1220"
+PANEL_2 = "#0d1929"
+BORDER = "#17324a"
+TEXT = "#ecf7ff"
+MUTED = "#7d94a6"
+ACCENT = "#49efe1"
+ACCENT_2 = "#78a7ff"
 
 
-class JarvisWindow:
-    """A real desktop window with keyboard input, voice capture, TTS, and tray hiding."""
+class Orb(QWidget):
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.phase = 0.0
+        self.state = AssistantState.IDLE
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update)
+        self.timer.start(32)
+        self.setMinimumHeight(260)
 
-    def __init__(self, assistant: Assistant):
-        self.assistant = assistant
-        self.root = tk.Tk()
-        self.root.title("JARVIS — Desktop AI Assistant")
-        self.root.geometry("920x760")
-        self.root.minsize(700, 600)
-        self.root.configure(bg=BACKGROUND)
-        self.root.protocol("WM_DELETE_WINDOW", self._minimize_to_tray)
-        self.root.bind("<Control-Return>", lambda _event: self.submit())
-        self.status = tk.StringVar(value="READY")
-        self.action = tk.StringVar(value="Awaiting your instruction")
-        self.mic_text = tk.StringVar(value="MIC OFF — click Talk to speak")
-        self._phase = 0.0
-        self._state = AssistantState.IDLE
-        self._busy = False
-        self.tts = None
-        self._tray = TrayController(self.show, self.pause, self.quit)
-        self._build()
-        self._set_state(AssistantState.IDLE, "Awaiting your instruction")
-        self._animate()
+    def set_state(self, state: AssistantState) -> None:
+        self.state = state
+        self.update()
 
-    def _build(self) -> None:
-        header = tk.Frame(self.root, bg=BACKGROUND)
-        header.pack(fill="x", padx=34, pady=(24, 8))
-        tk.Label(header, text="J A R V I S", font=("Segoe UI", 27, "bold"), fg=TEXT, bg=BACKGROUND).pack(side="left")
-        tk.Label(header, text="PHASE 1  •  DESKTOP AI", font=("Segoe UI", 9, "bold"), fg=ACCENT, bg=BACKGROUND).pack(side="left", padx=15, pady=11)
-        self.state_badge = tk.Label(header, textvariable=self.status, font=("Segoe UI", 9, "bold"), padx=12, pady=5, bg=STATE_COLORS[AssistantState.IDLE], fg=BACKGROUND)
-        self.state_badge.pack(side="right")
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        cx, cy = w / 2, h / 2 - 4
+        self.phase += 0.055
+        speed = 1.0 if self.state == AssistantState.IDLE else 1.8
+        pulse = 10 + (1 + __import__('math').sin(self.phase * speed)) * (9 if self.state == AssistantState.IDLE else 18)
+        outer = min(w, h) * 0.37
+        grad = QRadialGradient(QPointF(cx, cy), outer + pulse)
+        grad.setColorAt(0.0, QColor("#dffffd"))
+        grad.setColorAt(0.12, QColor(ACCENT))
+        grad.setColorAt(0.45, QColor("#103f55"))
+        grad.setColorAt(1.0, QColor(BG))
+        p.setBrush(grad)
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(QPointF(cx, cy), outer + pulse, outer + pulse)
+        for i in range(3):
+            radius = outer * (0.78 + i * 0.11) + pulse * (0.3 + i * 0.2)
+            pen = QPen(QColor(ACCENT if i < 2 else ACCENT_2), 1.5)
+            pen.setStyle(Qt.SolidLine)
+            p.setPen(pen)
+            p.setBrush(Qt.NoBrush)
+            p.drawEllipse(QPointF(cx, cy), radius, radius)
+        core = outer * 0.48 + pulse * 0.22
+        p.setBrush(QColor("#b9fffa"))
+        p.setPen(QPen(QColor(ACCENT), 2))
+        p.drawEllipse(QPointF(cx, cy), core, core)
+        p.setPen(QPen(QColor(BG), 2))
+        p.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        p.drawText(QRectF(cx - 90, cy - 11, 180, 24), Qt.AlignCenter, "J A R V I S")
+        p.setPen(QColor(MUTED))
+        p.setFont(QFont("Segoe UI", 9))
+        p.drawText(QRectF(cx - 100, h - 34, 200, 22), Qt.AlignCenter, self.state.value.upper())
 
-        dashboard = tk.Frame(self.root, bg=BACKGROUND)
-        dashboard.pack(fill="x", padx=34)
-        dashboard.columnconfigure(0, weight=1)
-        dashboard.columnconfigure(1, weight=2)
 
-        orb_card = tk.Frame(dashboard, bg=SURFACE, highlightbackground="#1e4960", highlightthickness=1)
-        orb_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        self.orb = tk.Canvas(orb_card, width=270, height=230, bg=SURFACE, highlightthickness=0)
-        self.orb.pack(expand=True, fill="both", padx=14, pady=(12, 0))
-        tk.Label(orb_card, textvariable=self.mic_text, bg=SURFACE, fg=MUTED, font=("Segoe UI", 9)).pack(pady=(0, 14))
+class Signals(QObject):
+    started = Signal(str)
+    delta = Signal(str)
+    done = Signal(object)
+    error = Signal(str)
 
-        status_card = tk.Frame(dashboard, bg=SURFACE, highlightbackground="#1e4960", highlightthickness=1)
-        status_card.grid(row=0, column=1, sticky="nsew")
-        tk.Label(status_card, text="CURRENT ACTIVITY", bg=SURFACE, fg=MUTED, font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=22, pady=(22, 4))
-        tk.Label(status_card, textvariable=self.action, bg=SURFACE, fg=TEXT, font=("Segoe UI", 16, "bold"), wraplength=460, justify="left").pack(anchor="w", padx=22)
-        tk.Label(status_card, text="Conversation stays on this device unless you configure an AI provider.", bg=SURFACE, fg=MUTED, font=("Segoe UI", 9), wraplength=460, justify="left").pack(anchor="w", padx=22, pady=(12, 18))
-        self.waveform = tk.Canvas(status_card, height=74, bg=SURFACE, highlightthickness=0)
-        self.waveform.pack(fill="x", padx=20, pady=(0, 15))
 
-        transcript_label = tk.Frame(self.root, bg=BACKGROUND)
-        transcript_label.pack(fill="x", padx=34, pady=(19, 5))
-        tk.Label(transcript_label, text="LIVE CONVERSATION", bg=BACKGROUND, fg=MUTED, font=("Segoe UI", 9, "bold")).pack(side="left")
-        tk.Label(transcript_label, text="Ctrl+Enter to send", bg=BACKGROUND, fg=MUTED, font=("Segoe UI", 9)).pack(side="right")
-        self.transcript = scrolledtext.ScrolledText(self.root, height=14, bg="#081827", fg=TEXT, insertbackground=TEXT, relief="flat", borderwidth=0, font=("Segoe UI", 10), wrap="word", padx=16, pady=14)
-        self.transcript.pack(fill="both", expand=True, padx=34)
-        self.transcript.configure(state="disabled")
-
-        composer = tk.Frame(self.root, bg=BACKGROUND)
-        composer.pack(fill="x", padx=34, pady=20)
-        self.entry = tk.Entry(composer, bg=SURFACE_ALT, fg=TEXT, insertbackground=TEXT, relief="flat", font=("Segoe UI", 12))
-        self.entry.pack(side="left", fill="x", expand=True, ipady=12)
-        self.entry.bind("<Return>", lambda _event: self.submit())
-        self.send = self._button(composer, "SEND", self.submit, "#176d99")
-        self.send.pack(side="left", padx=8)
-        self.talk = self._button(composer, "◉  TALK", self.listen, "#128a7d")
-        self.talk.pack(side="left")
-        self.stop_button = self._button(composer, "STOP", self.stop_speech, "#6a3554")
-        self.stop_button.pack(side="left", padx=(8, 0))
-        self.root.bind("<Escape>", lambda _event: self.stop_speech())
-        self.entry.focus_set()
-
-    def _button(self, parent: tk.Widget, label: str, command, color: str) -> tk.Button:
-        return tk.Button(parent, text=label, command=command, bg=color, fg="white", activebackground=ACCENT, activeforeground=BACKGROUND, relief="flat", font=("Segoe UI", 9, "bold"), padx=15, pady=11, cursor="hand2")
-
-    def _set_state(self, state: AssistantState, action: str) -> None:
-        self._state = state
-        self.status.set(state.value.upper())
-        self.action.set(action)
-        self.state_badge.configure(bg=STATE_COLORS[state])
-        if state is AssistantState.LISTENING:
-            self.mic_text.set("MIC ACTIVE — listening for one request")
-        elif state is AssistantState.PAUSED:
-            self.mic_text.set("MIC PAUSED")
-        else:
-            self.mic_text.set("MIC OFF — click Talk to speak")
-
-    def _animate(self) -> None:
-        self._phase += 0.15
-        color = STATE_COLORS[self._state]
-        pulse = 8 + (math.sin(self._phase) + 1) * (12 if self._state != AssistantState.IDLE else 4)
-        cx, cy = 135, 108
-        self.orb.delete("all")
-        for radius, stipple in ((90 + pulse, "gray25"), (72 + pulse / 2, "gray50")):
-            self.orb.create_oval(cx-radius, cy-radius, cx+radius, cy+radius, fill=color, outline="", stipple=stipple)
-        self.orb.create_oval(61, 34, 209, 182, fill="#0d3750", outline=color, width=3)
-        self.orb.create_oval(83, 56, 187, 160, fill=color, outline="")
-        self.orb.create_oval(105, 78, 165, 138, fill="#dffeff", outline="")
-        self.orb.create_text(cx, 205, text=self._state.value.upper(), fill=color, font=("Segoe UI", 10, "bold"))
-        self.waveform.delete("all")
-        width = max(self.waveform.winfo_width(), 500)
-        intensity = 5 if self._state is AssistantState.IDLE else 20
-        for index in range(34):
-            x = 10 + index * (width - 20) / 33
-            height = 6 + abs(math.sin(self._phase + index * 0.52)) * intensity
-            self.waveform.create_line(x, 37-height, x, 37+height, fill=color, width=3)
-        self.root.after(45, self._animate)
-
-    def append(self, role: str, text: str) -> None:
-        self.transcript.configure(state="normal")
-        self.transcript.insert("end", f"{role}\n", ("role",))
-        self.transcript.insert("end", f"{text}\n\n")
-        self.transcript.tag_configure("role", foreground=ACCENT, font=("Segoe UI", 9, "bold"))
-        self.transcript.see("end")
-        self.transcript.configure(state="disabled")
-
-    def submit(self) -> None:
-        text = self.entry.get().strip()
-        if text.lower() in {"stop", "ruk", "ruk ja"}:
-            self.entry.delete(0, "end")
-            self.stop_speech()
-            return
-        if text and not self._busy:
-            self.entry.delete(0, "end")
-            self.process(text)
-
-    def process(self, text: str) -> None:
-        self._busy = True
-        self.send.configure(state="disabled")
-        self.talk.configure(state="disabled")
-        self.append("YOU", text)
-        self._set_state(AssistantState.THINKING, "Understanding your request…")
-        self.root.after(180, self._show_executing_if_busy)
-        threading.Thread(target=self._work, args=(text,), daemon=True).start()
-
-    def _show_executing_if_busy(self) -> None:
-        if self._busy and self._state is AssistantState.THINKING:
-            self._set_state(AssistantState.EXECUTING, "Executing requested tool…")
-
-    def _work(self, text: str) -> None:
-        reply = self.assistant.handle(text)
-        self.root.after(0, lambda: self._finish(reply))
-
-    def _finish(self, reply: ChatReply) -> None:
-        self.append("JARVIS", reply.text)
-        self._set_state(AssistantState.SPEAKING, reply.text)
-        self._speak(reply.text)
-
-    def _speak(self, text: str) -> None:
-        if not self.assistant.settings.voice_enabled:
-            self._ready()
-            return
-        from jarvis.voice.tts import TextToSpeech
-
-        try:
-            self.tts = TextToSpeech(self.assistant.settings)
-            self.tts.speak_async(text, lambda: self.root.after(0, self._speech_finished))
-        except Exception:
-            self._ready()
-
-    def _speech_finished(self) -> None:
-        if self._state is AssistantState.SPEAKING:
-            self._ready()
-
-    def stop_speech(self) -> None:
-        """Interrupt audio immediately; Escape is a keyboard shortcut for this action."""
-        if self.tts is not None:
-            self.tts.stop()
-        if self._state is AssistantState.SPEAKING:
-            self.append("JARVIS", "Speech stopped.")
-            self._ready()
-
-    def _ready(self) -> None:
-        self._busy = False
-        self.send.configure(state="normal")
-        self.talk.configure(state="normal")
-        self._set_state(AssistantState.IDLE, "Awaiting your instruction")
-
-    def listen(self) -> None:
-        if self._busy:
-            return
-        self._set_state(AssistantState.LISTENING, "Listening… microphone is active only for this request.")
-        self._busy = True
-        self.talk.configure(state="disabled")
-        threading.Thread(target=self._listen_work, daemon=True).start()
-
-    def _listen_work(self) -> None:
-        if importlib.util.find_spec("speech_recognition") is None:
-            self.root.after(0, lambda: self._voice_error("SpeechRecognition is not installed."))
-            return
-        from jarvis.voice.stt import SpeechToText
-
-        try:
-            text = SpeechToText().listen_once()
-            self.root.after(0, lambda: self._handle_voice_text(text))
-        except Exception as exc:
-            self.root.after(0, lambda: self._voice_error(str(exc)))
-
-    def _handle_voice_text(self, text: str) -> None:
-        self._busy = False
-        if text:
-            self.process(text)
-        else:
-            self._voice_empty()
-
-    def _voice_empty(self) -> None:
-        self.append("JARVIS", "I didn't catch that. Please try again.")
-        self._ready()
-
-    def _voice_error(self, error: str) -> None:
-        self.append("JARVIS", f"Voice input is unavailable: {error}")
-        self._ready()
-
-    def show(self) -> None:
-        self.root.after(0, lambda: (self.root.deiconify(), self.root.lift(), self.root.focus_force()))
-
-    def pause(self) -> None:
-        self.root.after(0, lambda: self._set_state(AssistantState.PAUSED, "Assistant paused"))
-
-    def _minimize_to_tray(self) -> None:
-        if self._tray.start():
-            self.root.withdraw()
-        else:
-            self.root.iconify()
-
-    def quit(self) -> None:
-        self._tray.stop()
-        self.root.after(0, self.root.destroy)
+class CommandWorker(QRunnable):
+    def __init__(self, assistant: Assistant, text: str, signals: Signals):
+        super().__init__()
+        self.assistant, self.text, self.signals = assistant, text, signals
 
     def run(self) -> None:
-        self._tray.start()
-        self.root.mainloop()
+        try:
+            self.signals.started.emit(self.text)
+            reply = self.assistant.handle(self.text, on_delta=self.signals.delta.emit)
+            self.signals.done.emit(reply)
+        except Exception as exc:
+            self.signals.error.emit(str(exc))
+
+
+class SettingsDialog(QDialog):
+    saved = Signal()
+
+    def __init__(self, settings: Settings, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.settings = settings
+        self.setWindowTitle("JARVIS Settings")
+        self.setModal(True)
+        self.resize(520, 360)
+        self.setStyleSheet("QDialog { background:#08111e; color:#ecf7ff; } QLabel { color:#a9bfce; } QLineEdit { background:#0e1b2b; color:#ecf7ff; border:1px solid #1d4058; padding:9px; }")
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.model = QLineEdit(settings.model)
+        self.base_url = QLineEdit(settings.base_url)
+        self.key = QLineEdit(settings.api_key)
+        self.key.setEchoMode(QLineEdit.Password)
+        self.voice = QCheckBox("Enable spoken replies")
+        self.voice.setChecked(settings.voice_enabled)
+        self.wake = QCheckBox("Start background wake-word listening")
+        self.wake.setChecked(settings.always_listening)
+        form.addRow("Model", self.model)
+        form.addRow("Gemini/OpenAI Base URL", self.base_url)
+        form.addRow("API key", self.key)
+        form.addRow("", self.voice)
+        form.addRow("", self.wake)
+        layout.addLayout(form)
+        hint = QLabel("Changes are saved to the local .env file. API keys are never written to the repository.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#6f8ba0")
+        layout.addWidget(hint)
+        buttons = QHBoxLayout()
+        save = QPushButton("SAVE")
+        close = QPushButton("CANCEL")
+        save.clicked.connect(self.save)
+        close.clicked.connect(self.reject)
+        buttons.addStretch(1); buttons.addWidget(close); buttons.addWidget(save)
+        layout.addLayout(buttons)
+
+    def save(self) -> None:
+        env_path = Settings().app_dir / ".env"
+        lines = []
+        existing = {}
+        if env_path.exists():
+            for raw in env_path.read_text(encoding="utf-8").splitlines():
+                if "=" in raw and not raw.lstrip().startswith("#"):
+                    key, value = raw.split("=", 1)
+                    existing[key.strip()] = value
+        existing.update({
+            "JARVIS_OPENAI_API_KEY": self.key.text().strip(),
+            "JARVIS_MODEL": self.model.text().strip(),
+            "OPENAI_BASE_URL": self.base_url.text().strip(),
+            "JARVIS_VOICE_ENABLED": "true" if self.voice.isChecked() else "false",
+            "JARVIS_ALWAYS_LISTENING": "true" if self.wake.isChecked() else "false",
+        })
+        env_path.write_text("\n".join(f"{k}={v}" for k, v in existing.items()) + "\n", encoding="utf-8")
+        QMessageBox.information(self, "Saved", "Settings saved. Restart JARVIS if you changed the model or API key.")
+        self.saved.emit()
+        self.accept()
+
+
+class JarvisWindow(QMainWindow):
+    def __init__(self, assistant: Assistant):
+        super().__init__()
+        self.assistant = assistant
+        self.settings = assistant.settings
+        self.pool = QThreadPool.globalInstance()
+        self.signals = Signals()
+        self.voice = SpeechToText(self.settings)
+        self.tts = TextToSpeech(self.settings)
+        self.typing_mode = False
+        self.quitting = False
+        self.tray = QSystemTrayIcon(self._make_icon(), self)
+        self._configure_window()
+        self._build_ui()
+        self._connect_signals()
+        self._set_state(AssistantState.IDLE, "Haan bhai, JARVIS online hai. Bolo kya karna hai.")
+        if self.settings.voice_enabled:
+            self.tts.speak_async("Haan bhai, JARVIS online hai. Bolo kya karna hai.")
+        if self.settings.always_listening and self.settings.voice_enabled:
+            self.start_voice()
+
+    def _configure_window(self) -> None:
+        self.setWindowTitle("JARVIS — Personal AI Assistant")
+        self.resize(1180, 820)
+        self.setMinimumSize(900, 680)
+        self.setStyleSheet(f"""
+            QMainWindow, QWidget {{ background:{BG}; color:{TEXT}; }}
+            QLabel {{ color:{TEXT}; }}
+            QLineEdit, QTextEdit {{ background:{PANEL_2}; border:1px solid {BORDER}; border-radius:14px; color:{TEXT}; padding:12px; selection-background-color:#22556b; }}
+            QPushButton {{ background:#0d2030; color:{TEXT}; border:1px solid #1e465c; border-radius:12px; padding:11px 16px; font-weight:600; }}
+            QPushButton:hover {{ background:#123248; border-color:{ACCENT}; }}
+            QPushButton:checked {{ background:#114e51; border-color:{ACCENT}; }}
+            QScrollBar:vertical {{ background:transparent; width:10px; }}
+            QScrollBar::handle:vertical {{ background:#173b50; border-radius:5px; }}
+        """)
+
+    def _make_icon(self) -> QIcon:
+        from PySide6.QtGui import QPixmap
+        pm = QPixmap(64, 64); pm.fill(QColor(BG))
+        p = QPainter(pm); p.setRenderHint(QPainter.Antialiasing); p.setBrush(QColor(ACCENT)); p.setPen(QPen(QColor("#dffffd"), 2)); p.drawEllipse(8, 8, 48, 48); p.end()
+        return QIcon(pm)
+
+    def _card(self) -> QWidget:
+        card = QWidget(); card.setStyleSheet(f"background:{PANEL}; border:1px solid {BORDER}; border-radius:20px;"); return card
+
+    def _build_ui(self) -> None:
+        root = QWidget(); self.setCentralWidget(root); outer = QVBoxLayout(root); outer.setContentsMargins(24,20,24,20); outer.setSpacing(16)
+        top = QHBoxLayout()
+        brand = QLabel("J A R V I S"); brand.setFont(QFont("Segoe UI", 25, QFont.Bold)); brand.setStyleSheet(f"color:{TEXT};")
+        sub = QLabel("PERSONAL AI • WINDOWS CONTROL"); sub.setStyleSheet(f"color:{ACCENT}; letter-spacing:2px;")
+        top.addWidget(brand); top.addWidget(sub); top.addStretch(1)
+        self.status_badge = QLabel("READY"); self.status_badge.setStyleSheet(f"background:#10372f;color:{ACCENT};padding:8px 12px;border-radius:10px;font-weight:700;")
+        top.addWidget(self.status_badge)
+        self.settings_btn = QPushButton("⚙"); self.settings_btn.setFixedWidth(46); top.addWidget(self.settings_btn)
+        outer.addLayout(top)
+
+        dash = QHBoxLayout(); dash.setSpacing(16)
+        orb_card = self._card(); orb_layout = QVBoxLayout(orb_card); orb_layout.setContentsMargins(12,12,12,14)
+        self.orb = Orb(); orb_layout.addWidget(self.orb);
+        self.mic_label = QLabel("MIC OFF"); self.mic_label.setAlignment(Qt.AlignCenter); self.mic_label.setStyleSheet(f"color:{MUTED};font-weight:600;"); orb_layout.addWidget(self.mic_label)
+        dash.addWidget(orb_card, 4)
+
+        info = self._card(); info_l = QVBoxLayout(info); info_l.setContentsMargins(20,20,20,20)
+        small=QLabel("CURRENT ACTIVITY"); small.setStyleSheet(f"color:{MUTED};font-size:11px;font-weight:700;letter-spacing:2px;"); info_l.addWidget(small)
+        self.activity=QLabel("Awaiting your instruction"); self.activity.setWordWrap(True); self.activity.setFont(QFont("Segoe UI", 18, QFont.DemiBold)); info_l.addWidget(self.activity)
+        self.online=QLabel("● ONLINE AI   ● TOOLS READY   ● VOICE READY"); self.online.setStyleSheet(f"color:{ACCENT};margin-top:12px;"); info_l.addWidget(self.online)
+        self.help=QLabel("Try: “Jarvis, Chrome kholo”, “screen pe kya hai?”, “type hello bhai”, or “search latest Android phones”."); self.help.setWordWrap(True); self.help.setStyleSheet(f"color:{MUTED};line-height:1.3;margin-top:10px;"); info_l.addWidget(self.help)
+        info_l.addStretch(1)
+        dash.addWidget(info, 6); outer.addLayout(dash)
+
+        convo=self._card(); convo_l=QVBoxLayout(convo); convo_l.setContentsMargins(16,14,16,14)
+        label=QLabel("LIVE CONVERSATION"); label.setStyleSheet(f"color:{MUTED};font-size:11px;font-weight:700;letter-spacing:2px;"); convo_l.addWidget(label)
+        self.chat=QTextEdit(); self.chat.setReadOnly(True); self.chat.setMinimumHeight(250); self.chat.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Expanding); convo_l.addWidget(self.chat); outer.addWidget(convo, 1)
+
+        composer=self._card(); comp=QHBoxLayout(composer); comp.setContentsMargins(12,12,12,12); comp.setSpacing(8)
+        self.input=QLineEdit(); self.input.setPlaceholderText("Type anything… or use the wake phrase ‘Jarvis’"); self.input.returnPressed.connect(self.submit); comp.addWidget(self.input,1)
+        self.send=QPushButton("SEND"); self.send.clicked.connect(self.submit); comp.addWidget(self.send)
+        self.talk=QPushButton("● TALK"); self.talk.setCheckable(True); self.talk.clicked.connect(self.toggle_talk); comp.addWidget(self.talk)
+        self.type_btn=QPushButton("TYPE MODE"); self.type_btn.setCheckable(True); self.type_btn.clicked.connect(self.toggle_typing); comp.addWidget(self.type_btn)
+        self.stop_btn=QPushButton("STOP"); self.stop_btn.clicked.connect(self.stop_all); comp.addWidget(self.stop_btn)
+        outer.addWidget(composer)
+
+    def _connect_signals(self) -> None:
+        self.signals.started.connect(lambda text: self._set_state(AssistantState.THINKING, f"Understanding: {text}"))
+        self.signals.delta.connect(self._append_stream)
+        self.signals.done.connect(self._finish_reply)
+        self.signals.error.connect(lambda error: self._finish_text(f"I hit an error: {error}"))
+        self.settings_btn.clicked.connect(self.open_settings)
+
+    def _set_state(self, state: AssistantState, activity: str) -> None:
+        self.orb.set_state(state); self.status_badge.setText(state.value.upper()); self.activity.setText(activity)
+        if state == AssistantState.LISTENING:
+            self.mic_label.setText("● MIC ACTIVE • WAKE WORD ON")
+            self.mic_label.setStyleSheet(f"color:{ACCENT};font-weight:700;")
+        elif state == AssistantState.SPEAKING:
+            self.mic_label.setText("◉ SPEAKING")
+        else:
+            self.mic_label.setText("MIC OFF" if not self.voice.enabled else "● MIC READY • say Jarvis")
+
+    def _append_stream(self, chunk: str) -> None:
+        if not hasattr(self, "_stream_started") or not self._stream_started:
+            self._stream_started=True
+            self.chat.append("<b style='color:#49efe1'>JARVIS</b>")
+            self._stream_cursor = self.chat.textCursor(); self._stream_cursor.movePosition(self._stream_cursor.MoveOperation.End)
+        self.chat.moveCursor(self.chat.textCursor().MoveOperation.End)
+        self.chat.insertPlainText(chunk)
+        self.chat.ensureCursorVisible()
+        self._set_state(AssistantState.SPEAKING, "Responding…")
+
+    def _finish_reply(self, reply) -> None:
+        if getattr(self, "_stream_started", False):
+            self.chat.append("")
+            self._stream_started=False
+        else:
+            self._append_message("JARVIS", reply.text)
+        self._busy=False
+        self._set_state(AssistantState.SPEAKING, reply.text)
+        if self.settings.voice_enabled:
+            self.tts.speak_async(reply.text, self._speech_done)
+        else:
+            self._speech_done()
+
+    def _finish_text(self, text: str) -> None:
+        self._busy=False; self._append_message("JARVIS", text); self._set_state(AssistantState.IDLE,text)
+
+    def _speech_done(self) -> None:
+        self._busy=False
+        if self.voice.enabled:
+            self._set_state(AssistantState.LISTENING,"Haan, bolo. Main sun raha hoon…")
+        else:
+            self._set_state(AssistantState.IDLE,"Awaiting your instruction")
+
+    def _append_message(self, role: str, text: str) -> None:
+        color = ACCENT if role == "JARVIS" else ACCENT_2
+        safe = text.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\n","<br>")
+        self.chat.append(f"<div style='margin-top:8px;color:{color};font-weight:700'>{role}</div><div style='color:{TEXT};margin-bottom:8px'>{safe}</div>")
+
+    def submit(self) -> None:
+        text=self.input.text().strip()
+        if not text: return
+        self.input.clear(); self._append_message("YOU",text); self.process(text)
+
+    def process(self, text: str) -> None:
+        if text.lower() in {"stop","ruk","ruk ja","bas"}: self.stop_all(); return
+        if self._busy: return
+        self._busy=True; self._stream_started=False; self._set_state(AssistantState.THINKING,"Thinking…")
+        self.pool.start(CommandWorker(self.assistant,text,self.signals))
+
+    def start_voice(self) -> None:
+        if self.voice.enabled: return
+        self.voice.start_background(self._voice_command,self._voice_state,self._voice_error)
+        self.talk.setChecked(True)
+        self._set_state(AssistantState.LISTENING,"Haan, bolo. Main sun raha hoon…")
+
+    def stop_voice(self) -> None:
+        self.voice.stop_background(); self.talk.setChecked(False); self._set_state(AssistantState.IDLE,"Voice listening is off")
+
+    def toggle_talk(self) -> None:
+        if self.talk.isChecked(): self.start_voice()
+        else: self.stop_voice()
+
+    def _voice_state(self, active: bool) -> None:
+        self._set_state(AssistantState.LISTENING if active else AssistantState.IDLE, "Haan, bolo. Main sun raha hoon…" if active else "Voice listening is off")
+
+    def _voice_command(self, text: str) -> None:
+        def ui():
+            self._append_message("YOU", text)
+            if self.typing_mode:
+                low=text.lower().strip()
+                if low in {"typing band", "typing mode off", "stop typing"}:
+                    self.toggle_typing(False); self._set_state(AssistantState.LISTENING,"Typing mode off"); return
+                if low in {"new paragraph","new line","enter"}:
+                    from jarvis.tools.automation import keyboard_press; keyboard_press("enter"); return
+                from jarvis.tools.automation import keyboard_type; keyboard_type(text)
+            else:
+                self.process(text)
+        QTimer.singleShot(0, ui)
+
+    def _voice_error(self, error: str) -> None:
+        QTimer.singleShot(0, lambda: self._finish_text(f"Voice input is unavailable: {error}"))
+
+    def toggle_typing(self, checked: bool | None = None) -> None:
+        active=self.type_btn.isChecked() if checked is None else checked; self.typing_mode=active; self.type_btn.setChecked(active)
+        self._set_state(AssistantState.LISTENING if self.voice.enabled else AssistantState.IDLE, "Typing mode ON — voice will type into the focused app" if active else "Typing mode OFF")
+
+    def stop_all(self) -> None:
+        self.tts.stop(); self._busy=False; self._stream_started=False; self._set_state(AssistantState.IDLE,"Stopped")
+
+    def open_settings(self) -> None:
+        dlg=SettingsDialog(self.settings,self); dlg.exec()
+
+    def closeEvent(self,event) -> None:
+        if self.quitting:
+            self.voice.stop_background(); self.tts.stop(); self.tray.hide(); event.accept(); return
+        self.hide(); self.tray.show(); event.ignore()
+
+    def quit_app(self) -> None:
+        self.quitting=True; self.close()
+
+    def setup_tray(self) -> None:
+        self.tray.setToolTip("JARVIS — Personal AI Assistant")
+        menu=self.tray.contextMenu()
+        if menu is None:
+            from PySide6.QtWidgets import QMenu
+            menu=QMenu(self)
+        menu.clear()
+        open_action=QAction("Open JARVIS",self); open_action.triggered.connect(self.show_window)
+        toggle=QAction("Toggle listening",self); toggle.triggered.connect(lambda: self.stop_voice() if self.voice.enabled else self.start_voice())
+        exit_action=QAction("Exit",self); exit_action.triggered.connect(self.quit_app)
+        menu.addAction(open_action); menu.addAction(toggle); menu.addSeparator(); menu.addAction(exit_action); self.tray.setContextMenu(menu)
+        self.tray.activated.connect(lambda reason: self.show_window() if reason == QSystemTrayIcon.Trigger else None); self.tray.show()
+
+    def show_window(self) -> None:
+        self.show(); self.raise_(); self.activateWindow()
+
+    def run(self) -> None:
+        self.setup_tray(); self.show()
