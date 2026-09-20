@@ -37,7 +37,9 @@ class Settings:
     ollama_url: str = field(default_factory=lambda: os.getenv("JARVIS_OLLAMA_URL", "http://127.0.0.1:11434").strip())
     thinking_level: str = field(default_factory=lambda: os.getenv("JARVIS_THINKING_LEVEL", "low").strip().lower())
     response_timeout: float = field(default_factory=lambda: float(os.getenv("JARVIS_RESPONSE_TIMEOUT", "25")))
-    max_agent_steps: int = field(default_factory=lambda: max(1, min(6, int(os.getenv("JARVIS_MAX_AGENT_STEPS", "4"))))
+    max_agent_steps: int = field(
+        default_factory=lambda: max(1, min(6, int(os.getenv("JARVIS_MAX_AGENT_STEPS", "4"))))
+    )
     voice_enabled: bool = field(default_factory=lambda: _env_bool("JARVIS_VOICE_ENABLED", True))
     always_listening: bool = field(default_factory=lambda: _env_bool("JARVIS_ALWAYS_LISTENING", True))
     wake_phrase: str = field(default_factory=lambda: os.getenv("JARVIS_WAKE_PHRASE", "jarvis").strip())
