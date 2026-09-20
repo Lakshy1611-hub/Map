@@ -243,7 +243,7 @@ class JarvisWindow(QMainWindow):
         outer.addWidget(composer)
 
     def _connect_signals(self) -> None:
-        self.signals.started.connect(lambda text: self._set_state(AssistantState.THINKING, f"Understanding: {text}"))\n        self.voice_state_signal.connect(self._voice_state_gui)\n        self.voice_error_signal.connect(self._voice_error_gui)\n        self.tts_finished_signal.connect(self._speech_done)
+        self.signals.started.connect(lambda text: self._set_state(AssistantState.THINKING, f"Understanding: {text}"))\n        self.signals.voice_state.connect(self._voice_state_gui)\n        self.signals.voice_error.connect(self._voice_error_gui)\n        self.signals.tts_finished.connect(self._speech_done)
         self.signals.delta.connect(self._append_stream)
         self.signals.done.connect(self._finish_reply)
         self.signals.error.connect(lambda error: self._finish_text(f"I hit an error: {error}"))
@@ -278,7 +278,7 @@ class JarvisWindow(QMainWindow):
         self._busy=False
         self._set_state(AssistantState.SPEAKING, reply.text)
         if self.settings.voice_enabled:
-            self.tts.speak_async(reply.text, lambda: self.tts_finished_signal.emit())
+            self.tts.speak_async(reply.text, lambda: self.signals.tts_finished.emit())
         else:
             self._speech_done()
 
