@@ -24,7 +24,7 @@ JARVIS is a **real Python Windows desktop application**, not a browser mock-up o
 - Text conversation, contextual follow-up (`Chrome open kar` then `ab YouTube pe ja`), and common English/Hinglish local handling when no model key is configured.
 - Optional OpenAI model integration for dynamic natural-language selection among registered explicit tools; no model output can execute directly.
 - Windows application launching for Chrome, Notepad and VS Code; PyAutoGUI keyboard, mouse and screenshot controls; browser URL/search; file, terminal and system tools.
-- One-request microphone input and TTS output behind replaceable provider modules. The microphone is only opened after **TALK** is pressed.
+- One-request microphone input and non-blocking multilingual TTS output behind replaceable provider modules. The default `edge_tts` provider uses neural Hindi and Indian-English voices, separates mixed Hindi/English speech where possible, and falls back to local `pyttsx3` if it is unavailable. The microphone is only opened after **TALK** is pressed.
 - System tray UI with Open, Pause and Exit actions when `pystray` and Pillow are installed. Closing the window minimizes it to the tray instead of exiting.
 - Confirmation for deletion and known destructive command patterns.
 
@@ -44,6 +44,10 @@ python main.py
 ```
 
 Set `JARVIS_OPENAI_API_KEY`, `JARVIS_MODEL`, and `OPENAI_BASE_URL` in `.env` for AI-powered dynamic planning. For Gemini’s OpenAI-compatible API use `OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/`. JARVIS intentionally reads `JARVIS_OPENAI_API_KEY` rather than `OPENAI_API_KEY`. Without it, the intentional local fallback handles the Phase 1 examples but is not a replacement for an LLM.
+
+### Multilingual speech
+
+`JARVIS_TTS_PROVIDER=edge_tts` is the recommended Windows configuration. It uses the standard configurable `JARVIS_TTS_ENGLISH_VOICE` and `JARVIS_TTS_HINDI_VOICE` names rather than local machine voice IDs. Set `JARVIS_TTS_LANGUAGE_AUTO=true` to detect Devanagari, English, and common Romanized Hindi phrases; well-known English product names such as Chrome, YouTube, Windows, Google, browser, file, and search remain in English voice segments. `pyttsx3` remains the local fallback. Press **STOP** or **Esc** to interrupt playback.
 
 ### Windows prerequisites
 

@@ -49,6 +49,7 @@ class JarvisWindow:
         self._phase = 0.0
         self._state = AssistantState.IDLE
         self._busy = False
+        self.tts = None
         self._tray = TrayController(self.show, self.pause, self.quit)
         self._build()
         self._set_state(AssistantState.IDLE, "Awaiting your instruction")
@@ -98,6 +99,9 @@ class JarvisWindow:
         self.send.pack(side="left", padx=8)
         self.talk = self._button(composer, "◉  TALK", self.listen, "#128a7d")
         self.talk.pack(side="left")
+        self.stop_button = self._button(composer, "STOP", self.stop_speech, "#6a3554")
+        self.stop_button.pack(side="left", padx=(8, 0))
+        self.root.bind("<Escape>", lambda _event: self.stop_speech())
         self.entry.focus_set()
 
     def _button(self, parent: tk.Widget, label: str, command, color: str) -> tk.Button:
@@ -146,6 +150,10 @@ class JarvisWindow:
 
     def submit(self) -> None:
         text = self.entry.get().strip()
+        if text.lower() in {"stop", "ruk", "ruk ja"}:
+            self.entry.delete(0, "end")
+            self.stop_speech()
+            return
         if text and not self._busy:
             self.entry.delete(0, "end")
             self.process(text)
@@ -170,21 +178,31 @@ class JarvisWindow:
     def _finish(self, reply: ChatReply) -> None:
         self.append("JARVIS", reply.text)
         self._set_state(AssistantState.SPEAKING, reply.text)
-        threading.Thread(target=self._speak, args=(reply.text,), daemon=True).start()
-        self.root.after(900, self._ready)
+        self._speak(reply.text)
 
     def _speak(self, text: str) -> None:
         if not self.assistant.settings.voice_enabled:
-            return
-        if importlib.util.find_spec("pyttsx3") is None:
+            self._ready()
             return
         from jarvis.voice.tts import TextToSpeech
 
         try:
-            TextToSpeech().say(text)
+            self.tts = TextToSpeech(self.assistant.settings)
+            self.tts.speak_async(text, lambda: self.root.after(0, self._speech_finished))
         except Exception:
-            # Voice is optional; response remains visible and no action is silently reported as complete.
-            return
+            self._ready()
+
+    def _speech_finished(self) -> None:
+        if self._state is AssistantState.SPEAKING:
+            self._ready()
+
+    def stop_speech(self) -> None:
+        """Interrupt audio immediately; Escape is a keyboard shortcut for this action."""
+        if self.tts is not None:
+            self.tts.stop()
+        if self._state is AssistantState.SPEAKING:
+            self.append("JARVIS", "Speech stopped.")
+            self._ready()
 
     def _ready(self) -> None:
         self._busy = False
