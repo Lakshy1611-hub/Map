@@ -35,7 +35,8 @@ class LLMProvider:
         stream = client.chat.completions.create(
             model=self.settings.model,
             messages=[{"role": "system", "content": self._system_prompt()}, *messages],
-            stream=True,\n            reasoning_effort=self.settings.thinking_level,
+            stream=True,
+            reasoning_effort=self.settings.thinking_level,
         )
         parts: list[str] = []
         for chunk in stream:
@@ -64,7 +65,8 @@ class LLMProvider:
         result = client.chat.completions.create(
             model=self.settings.model,
             messages=[{"role": "system", "content": system}, *messages],
-            response_format={"type": "json_object"},\n            reasoning_effort=self.settings.thinking_level,
+            response_format={"type": "json_object"},
+            reasoning_effort=self.settings.thinking_level,
         )
         content = result.choices[0].message.content
         if not content:
